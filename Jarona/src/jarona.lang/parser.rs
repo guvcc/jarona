@@ -1,5 +1,5 @@
-use crate::ast::{BinaryOp, Expr, Program, Stmt, UnaryOp};
-use crate::token::{Token, TokenKind};
+use super::ast::{BinaryOp, Expr, Program, Stmt, UnaryOp};
+use super::token::{Token, TokenKind};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -8,7 +8,10 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, current: 0 }
+        Self {
+            tokens,
+            current: 0,
+        }
     }
 
     pub fn parse_program(&mut self) -> Result<Program, String> {
@@ -27,27 +30,83 @@ impl Parser {
         }
 
         if self.matches(&TokenKind::Print) {
-            self.consume(&TokenKind::LParen, "expected '(' after 'print'")?;
+            self.consume(
+                &TokenKind::LParen,
+                "expected '(' after 'print'",
+            )?;
+
             let value = self.expression()?;
-            self.consume(&TokenKind::RParen, "expected `)` after print expression")?;
-            self.consume(&TokenKind::Semicolon, "expected `;` after print statement")?;
+
+            self.consume(
+                &TokenKind::RParen,
+                "expected `)` after print expression",
+            )?;
+
+            self.consume(
+                &TokenKind::Semicolon,
+                "expected `;` after print statement",
+            )?;
+
             return Ok(Stmt::Print(value));
         }
 
+        // Reassignment: x = expression;
+        if let TokenKind::Ident(name) = self.peek().kind.clone() {
+            if self
+                .tokens
+                .get(self.current + 1)
+                .map(|t| &t.kind)
+                == Some(&TokenKind::Equal)
+            {
+                self.advance(); // identifier
+                self.advance(); // =
+
+                let value = self.expression()?;
+
+                self.consume(
+                    &TokenKind::Semicolon,
+                    "expected `;` after assignment",
+                )?;
+
+                return Ok(Stmt::Assign {
+                    name,
+                    value,
+                });
+            }
+        }
+
         let expr = self.expression()?;
-        self.consume(&TokenKind::Semicolon, "expected `;` after expression")?;
+
+        self.consume(
+            &TokenKind::Semicolon,
+            "expected `;` after expression",
+        )?;
+
         Ok(Stmt::Expr(expr))
     }
 
     fn var_statement(&mut self) -> Result<Stmt, String> {
         let name = match self.advance().kind.clone() {
             TokenKind::Ident(name) => name,
-            _ => return Err(self.error("expected identifier after `var`")),
+
+            _ => {
+                return Err(
+                    self.error("expected identifier after `var`")
+                );
+            }
         };
 
-        self.consume(&TokenKind::Equal, "expected `=` after variable name")?;
+        self.consume(
+            &TokenKind::Equal,
+            "expected `=` after variable name",
+        )?;
+
         let value = self.expression()?;
-        self.consume(&TokenKind::Semicolon, "expected `;` after let statement")?;
+
+        self.consume(
+            &TokenKind::Semicolon,
+            "expected `;` after let statement",
+        )?;
 
         Ok(Stmt::Var { name, value })
     }
@@ -59,13 +118,18 @@ impl Parser {
     fn term(&mut self) -> Result<Expr, String> {
         let mut expr = self.factor()?;
 
-        while self.matches_any(&[TokenKind::Plus, TokenKind::Minus]) {
+        while self.matches_any(&[
+            TokenKind::Plus,
+            TokenKind::Minus,
+        ]) {
             let op = match self.previous().kind {
                 TokenKind::Plus => BinaryOp::Add,
                 TokenKind::Minus => BinaryOp::Subtract,
                 _ => unreachable!(),
             };
+
             let right = self.factor()?;
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 op,
@@ -79,13 +143,18 @@ impl Parser {
     fn factor(&mut self) -> Result<Expr, String> {
         let mut expr = self.unary()?;
 
-        while self.matches_any(&[TokenKind::Star, TokenKind::Slash]) {
+        while self.matches_any(&[
+            TokenKind::Star,
+            TokenKind::Slash,
+        ]) {
             let op = match self.previous().kind {
                 TokenKind::Star => BinaryOp::Multiply,
                 TokenKind::Slash => BinaryOp::Divide,
                 _ => unreachable!(),
             };
+
             let right = self.unary()?;
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 op,
@@ -97,13 +166,18 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Expr, String> {
-        if self.matches_any(&[TokenKind::Minus, TokenKind::Plus]) {
+        if self.matches_any(&[
+            TokenKind::Minus,
+            TokenKind::Plus,
+        ]) {
             let op = match self.previous().kind {
                 TokenKind::Minus => UnaryOp::Negate,
                 TokenKind::Plus => UnaryOp::Plus,
                 _ => unreachable!(),
             };
+
             let expr = self.unary()?;
+
             return Ok(Expr::Unary {
                 op,
                 expr: Box::new(expr),
@@ -115,18 +189,91 @@ impl Parser {
 
     fn primary(&mut self) -> Result<Expr, String> {
         match self.advance().kind.clone() {
-            TokenKind::Number(value) => Ok(Expr::Number(value)),
-            TokenKind::Ident(name) => Ok(Expr::Variable(name)),
+            TokenKind::Number(value) => {
+                Ok(Expr::Number(value))
+            }
+
+            TokenKind::String(value) => {
+                Ok(Expr::String(value))
+            }
+
+            TokenKind::Ident(name) => {
+                Ok(Expr::Variable(name))
+            }
+
+            TokenKind::LBracket => {
+                let mut elements = Vec::new();
+
+                while !self.check(&TokenKind::RBracket) {
+                    if self.is_at_end() {
+                        return Err(
+                            self.error("expected `]` after array")
+                        );
+                    }
+
+                    elements.push(self.expression()?);
+                }
+
+                self.consume(
+                    &TokenKind::RBracket,
+                    "expected `]` after array",
+                )?;
+
+                Ok(Expr::Array(elements))
+            }
+
+            TokenKind::Import => {
+                self.consume(
+                    &TokenKind::LParen,
+                    "expected `(` after `import`",
+                )?;
+
+                let path = self.expression()?;
+
+                self.consume(
+                    &TokenKind::RParen,
+                    "expected `)` after import path",
+                )?;
+
+                Ok(Expr::Import(Box::new(path)))
+            }
+
+            TokenKind::ImportStr => {
+                self.consume(
+                    &TokenKind::LParen,
+                    "expected `(` after `import$str`",
+                )?;
+
+                let path = self.expression()?;
+
+                self.consume(
+                    &TokenKind::RParen,
+                    "expected `)` after import$str path",
+                )?;
+
+                Ok(Expr::ImportStr(Box::new(path)))
+            }
+
             TokenKind::LParen => {
                 let expr = self.expression()?;
-                self.consume(&TokenKind::RParen, "expected `)` after expression")?;
+
+                self.consume(
+                    &TokenKind::RParen,
+                    "expected `)` after expression",
+                )?;
+
                 Ok(expr)
             }
+
             _ => Err(self.error("expected expression")),
         }
     }
 
-    fn consume(&mut self, kind: &TokenKind, message: &str) -> Result<(), String> {
+    fn consume(
+        &mut self,
+        kind: &TokenKind,
+        message: &str,
+    ) -> Result<(), String> {
         if self.check(kind) {
             self.advance();
             Ok(())
@@ -151,6 +298,7 @@ impl Parser {
                 return true;
             }
         }
+
         false
     }
 
@@ -166,6 +314,7 @@ impl Parser {
         if !self.is_at_end() {
             self.current += 1;
         }
+
         self.previous()
     }
 
@@ -189,7 +338,7 @@ impl Parser {
 fn token_kind_matches(a: &TokenKind, b: &TokenKind) -> bool {
     matches!(
         (a, b),
-              (TokenKind::Var, TokenKind::Var)
+        (TokenKind::Var, TokenKind::Var)
             | (TokenKind::Print, TokenKind::Print)
             | (TokenKind::Plus, TokenKind::Plus)
             | (TokenKind::Minus, TokenKind::Minus)
@@ -204,5 +353,8 @@ fn token_kind_matches(a: &TokenKind, b: &TokenKind) -> bool {
             | (TokenKind::Ident(_), TokenKind::Ident(_))
             | (TokenKind::Import, TokenKind::Import)
             | (TokenKind::ImportStr, TokenKind::ImportStr)
+            | (TokenKind::String(_), TokenKind::String(_))
+            | (TokenKind::LBracket, TokenKind::LBracket)
+            | (TokenKind::RBracket, TokenKind::RBracket)
     )
 }

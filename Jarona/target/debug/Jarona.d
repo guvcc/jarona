@@ -1,1 +1,1 @@
-/home/guvcc/Projects/Jarona/Jarona/target/debug/Jarona: /home/guvcc/Projects/Jarona/Jarona/src/main.rs
+/home/guvcc/Projects/Jarona/Jarona/target/debug/Jarona: /home/guvcc/Projects/Jarona/Jarona/src/jarona.lang/ast.rs /home/guvcc/Projects/Jarona/Jarona/src/jarona.lang/interpreter.rs /home/guvcc/Projects/Jarona/Jarona/src/jarona.lang/lexer.rs /home/guvcc/Projects/Jarona/Jarona/src/jarona.lang/parser.rs /home/guvcc/Projects/Jarona/Jarona/src/jarona.lang/reader.rs /home/guvcc/Projects/Jarona/Jarona/src/jarona.lang/token.rs /home/guvcc/Projects/Jarona/Jarona/src/main.rs

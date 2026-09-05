@@ -4,6 +4,7 @@ pub enum TokenKind {
     Print,
     Ident(String),
     Number(f64),
+    String(String),
     Import,
     ImportStr,
     Plus,
@@ -13,13 +14,15 @@ pub enum TokenKind {
     Equal,
     LParen,
     RParen,
+    LBracket,
+    RBracket,
     Eof,
     Semicolon,
 
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum TokenKind {
+pub struct Token {
     pub kind: TokenKind,
     pub lexeme: String,
     pub pos: usize,

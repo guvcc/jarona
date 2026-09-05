@@ -1,4 +1,4 @@
-use crate::token::{Token, TokenKind};
+use super::token::{Token, TokenKind};
 
 pub struct Lexer<'a> {
     chars: Vec<char>,
@@ -22,7 +22,9 @@ impl<'a> Lexer<'a> {
 
         while !self.is_at_end() {
             self.start = self.current;
+
             let token = self.scan_token()?;
+
             if let Some(token) = token {
                 tokens.push(token);
             }
@@ -37,21 +39,71 @@ impl<'a> Lexer<'a> {
         Ok(tokens)
     }
 
+    fn string(&mut self) -> Result<Token, String> {
+        while self.peek() != '"' && !self.is_at_end() {
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            return Err("unterminated string".to_string());
+        }
+
+        self.advance();
+
+        let value: String = self.chars[self.start + 1..self.current - 1]
+            .iter()
+            .collect();
+
+        Ok(Token {
+            kind: TokenKind::String(value.clone()),
+            lexeme: value,
+            pos: self.start,
+        })
+    }
+
     fn scan_token(&mut self) -> Result<Option<Token>, String> {
         let c = self.advance();
+
         let token = match c {
             '(' => Some(self.simple(TokenKind::LParen)),
             ')' => Some(self.simple(TokenKind::RParen)),
             '+' => Some(self.simple(TokenKind::Plus)),
             '-' => Some(self.simple(TokenKind::Minus)),
             '*' => Some(self.simple(TokenKind::Star)),
-            '/' => Some(self.simple(TokenKind::Slash)),
+            '[' => Some(self.simple(TokenKind::LBracket)),
+            ']' => Some(self.simple(TokenKind::RBracket)),
+
+            '/' => {
+                if self.peek() == '/' {
+                    self.advance();
+
+                    while self.peek() != '\n' && !self.is_at_end() {
+                        self.advance();
+                    }
+
+                    None
+                } else {
+                    Some(self.simple(TokenKind::Slash))
+                }
+            }
+
             '=' => Some(self.simple(TokenKind::Equal)),
             ';' => Some(self.simple(TokenKind::Semicolon)),
+
             ' ' | '\r' | '\t' | '\n' => None,
+
+            '"' => Some(self.string()?),
+
             c if c.is_ascii_digit() => Some(self.number()),
+
             c if is_ident_start(c) => Some(self.identifier()),
-            _ => return Err(format!("unexpected character `{c}` at {}", self.current - 1)),
+
+            _ => {
+                return Err(format!(
+                    "unexpected character `{c}` at {}",
+                    self.current - 1
+                ));
+            }
         };
 
         Ok(token)
@@ -72,6 +124,7 @@ impl<'a> Lexer<'a> {
 
         if self.peek() == '.' && self.peek_next().is_ascii_digit() {
             self.advance();
+
             while self.peek().is_ascii_digit() {
                 self.advance();
             }
@@ -79,6 +132,7 @@ impl<'a> Lexer<'a> {
 
         let lexeme = self.current_lexeme();
         let value = lexeme.parse::<f64>().unwrap();
+
         Token {
             kind: TokenKind::Number(value),
             lexeme,
@@ -92,11 +146,12 @@ impl<'a> Lexer<'a> {
         }
 
         let lexeme = self.current_lexeme();
+
         let kind = match lexeme.as_str() {
             "var" => TokenKind::Var,
             "print" => TokenKind::Print,
-            "import" => TokenKind::Import
-            "import$str" => TokenKind::ImportStr
+            "import" => TokenKind::Import,
+            "import$str" => TokenKind::ImportStr,
             _ => TokenKind::Ident(lexeme.clone()),
         };
 
@@ -113,16 +168,24 @@ impl<'a> Lexer<'a> {
 
     fn advance(&mut self) -> char {
         let c = self.chars[self.current];
+
         self.current += 1;
+
         c
     }
 
     fn peek(&self) -> char {
-        self.chars.get(self.current).copied().unwrap_or('\0')
+        self.chars
+            .get(self.current)
+            .copied()
+            .unwrap_or('\0')
     }
 
     fn peek_next(&self) -> char {
-        self.chars.get(self.current + 1).copied().unwrap_or('\0')
+        self.chars
+            .get(self.current + 1)
+            .copied()
+            .unwrap_or('\0')
     }
 
     fn is_at_end(&self) -> bool {

@@ -1,9 +1,5 @@
 use std::fs;
 
-mod interpreter;
-
-use interpreter::Interpreter;
-
 fn main() {
     let args: Vec<String> = env::args().collect();
 

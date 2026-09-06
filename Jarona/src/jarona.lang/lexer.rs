@@ -103,6 +103,18 @@ impl<'a> Lexer<'a> {
                 }
             }
 
+            ':' => {
+                if self.peek() == ':' {
+                    self.advance();
+                    Some(self.simple(TokenKind::DoubleColon))
+                } else {
+                    return Err(format!(
+                        "unexpected character `{c}` at {}",
+                        self.current - 1
+                    ));
+                }
+            }
+
             ';' => Some(self.simple(TokenKind::Semicolon)),
             
             '.' => Some(self.simple(TokenKind::Dot)),
@@ -178,6 +190,8 @@ impl<'a> Lexer<'a> {
             "void" => TokenKind::Void,
             "declare" => TokenKind::Declare,
             "struct" => TokenKind::Struct,
+            "enum" => TokenKind::Enum,
+            "run$r" => TokenKind::Run,
 
             _ => TokenKind::Ident(lexeme.clone()),
         };

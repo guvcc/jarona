@@ -31,6 +31,9 @@ pub enum TokenKind {
     Semicolon,
     Struct,
     Dot,
+    Enum,
+    DoubleColon,
+    Run,
 }
 
 #[derive(Debug, Clone, PartialEq)]

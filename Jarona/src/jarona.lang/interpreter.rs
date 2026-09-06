@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::fs;
+use std::process::Command;
 
 use crate::ast::{BinaryOp, Expr, Program, Stmt, UnaryOp};
 use crate::lexer::Lexer;
 use crate::parser::Parser;
+use crate::token::TokenKind;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -17,6 +19,11 @@ pub enum Value {
         name: String,
         fields: HashMap<String, Value>,
     },
+
+    Enum {
+        name: String,
+        variant: String,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -30,10 +37,16 @@ struct Struct {
     fields: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+struct Enum {
+    variants: Vec<String>,
+}
+
 pub struct Interpreter {
     variables: HashMap<String, Value>,
     functions: HashMap<String, Function>,
     structs: HashMap<String, Struct>,
+    enums: HashMap<String, Enum>,
 }
 
 impl Interpreter {
@@ -42,6 +55,7 @@ impl Interpreter {
             variables: HashMap::new(),
             functions: HashMap::new(),
             structs: HashMap::new(),
+            enums: HashMap::new(),
         }
     }
 
@@ -102,6 +116,22 @@ impl Interpreter {
                 self.structs.insert(
                     name.clone(),
                     structure,
+                );
+
+                Ok(None)
+            }
+
+            Stmt::Enum {
+                name,
+                variants,
+            } => {
+                let _enum = Enum {
+                    variants: variants.clone(),
+                };
+
+                self.enums.insert(
+                    name.clone(),
+                    _enum,
                 );
 
                 Ok(None)
@@ -202,6 +232,29 @@ impl Interpreter {
                 }
 
                 Ok(Value::Array(values))
+            }
+
+            Expr::EnumValue {
+                enum_name,
+                variant
+            } => {
+                let enum_def = self
+                     .enums
+                     .get(enum_name)
+                     .ok_or_else(|| {
+                        format!("undefined enum '{enum_name}'")
+                     })?;
+
+                if !enum_def.variants.contains(variant) {
+                    return Err(format!(
+                        "enum `{enum_name}` has no variant `{variant}`"
+                    ));
+                }
+
+                Ok(Value::Enum {
+                    name: enum_name.clone(),
+                    variant: variant.clone(),
+                })
             }
 
             Expr::Binary {
@@ -384,6 +437,38 @@ impl Interpreter {
         name: &str,
         args: &[Expr],
     ) -> Result<Value, String> {
+
+        if name == "run$r" {
+            
+            let mut command_args: Vec<String> = Vec::new();
+
+            for arg in args {
+                let value = self.evaluate(arg)?;
+
+                match value {
+                    Value::String(s) => {
+                            command_args.push(s);
+                    }
+                    _ => {
+                        return Err("expected a string".to_string());
+                    }
+                }
+            }
+
+            if command_args.is_empty() {
+                return Err("run$r expected at least one argument".to_string());
+            }
+
+            let output = Command::new(&command_args[0])
+                .args(&command_args[1..])
+                .output()
+                .expect("failed to execute process");
+
+            println!("{}", String::from_utf8_lossy(&output.stdout));
+
+            return Ok(Value::Null);
+        }
+
         let function = self
             .functions
             .get(name)
@@ -519,6 +604,10 @@ impl Interpreter {
                 println!("null");
             }
 
+            Value::Enum {name, variant} => {
+                println!("{name}::{variant}")
+            }
+
             Value::Struct {
                 name,
                 fields,
@@ -591,6 +680,18 @@ impl Interpreter {
                     self.variables.insert(
                         name,
                         value,
+                    );
+                }
+
+                Stmt::Enum {
+                    name,
+                    variants,
+                } => {
+                    self.enums.insert(
+                        name,
+                        Enum {
+                            variants,
+                        }
                     );
                 }
 

@@ -13,6 +13,7 @@ pub enum Stmt {
     Expr(Expr),
     Return(Expr),
     Struct { name: String, fields: Vec<String> },
+    Enum { name: String, variants: Vec<String>}
 }
 
 
@@ -23,6 +24,11 @@ pub enum Expr {
     Array(Vec<Expr>),
     String(String),
     Boolean(bool),
+    
+    EnumValue {
+        enum_name: String,
+        variant: String,
+    },
 
     Field {
         object: Box<Expr>,

@@ -41,6 +41,10 @@ impl Parser {
             return self.struct_statement();
         }
 
+        if self.matches(&TokenKind::Enum) {
+            return self.enum_statement();
+        }
+
         if self.matches(&TokenKind::Return) {
             let value = self.expression()?;
 
@@ -106,6 +110,66 @@ impl Parser {
         )?;
 
         Ok(Stmt::Expr(expr))
+    }
+
+
+    fn enum_statement(&mut self) -> Result<Stmt, String> {
+        let name = match self.advance().kind.clone() {
+            TokenKind::Ident(name) => name,
+            _ => {
+                return Err(
+                    self.error(
+                        "expected identifier after `struct`",
+                    )
+                );
+            }
+        };
+
+        self.consume(
+            &TokenKind::LBrace,
+            "expected `{` after if name",
+        )?;
+
+        let mut variants = Vec::new();
+
+        while !self.check(&TokenKind::RBrace) {
+            if self.is_at_end() {
+                return Err(
+                    self.error(
+                        "expected `)` after parameters",
+                    )
+                );
+            }
+
+            match self.advance().kind.clone() {
+                TokenKind::Ident(param) => {
+                    variants.push(param);
+
+                    self.consume(
+                        &TokenKind::Semicolon,
+                        "expected `;` after field",
+                    )?;
+                }
+
+                _ => {
+                    return Err(
+                        self.error(
+                            "expected parameter name",
+                        )
+                    );
+                }
+            }
+        }
+
+        self.consume(
+            &TokenKind::RBrace,
+            "expected `)` after parameters",
+        )?;
+
+        Ok(Stmt::Enum {
+            name,
+            variants,
+        })
     }
 
     fn struct_statement(&mut self) -> Result<Stmt, String> {
@@ -491,10 +555,40 @@ impl Parser {
                     object: Box::new(expr),
                     name,
                 };
+            } else if self.matches(&TokenKind::DoubleColon) {
+                let enum_name = match expr {
+                    Expr::Variable(name) => name,
+
+                    _ => {
+                        return Err(
+                            self.error(
+                                "expected enum name before `::`",
+                            )
+                        );
+                    }
+                };
+
+                let variant = match self.advance().kind.clone() {
+                    TokenKind::Ident(name) => name,
+                    
+                    _ => {
+                        return Err(
+                            self.error(
+                                "expected variant name after `::`",
+                            )
+                        );
+                    }
+                };
+
+                expr = Expr::EnumValue { 
+                    enum_name,
+                    variant,
+                };
+                
             } else {
                 break;
             }
-        }
+        };
 
         Ok(expr)
     }
@@ -523,6 +617,10 @@ impl Parser {
 
             TokenKind::Ident(name) => {
                 Ok(Expr::Variable(name))
+            }
+
+            TokenKind::Run => {
+                Ok(Expr::Variable("run$r".to_string()))
             }
 
             TokenKind::Declare => {
@@ -768,6 +866,14 @@ fn token_kind_matches(
             | (
                 TokenKind::Dot,
                 TokenKind::Dot
+            )
+            | (
+                TokenKind::DoubleColon,
+                TokenKind::DoubleColon
+            )
+            | (
+                TokenKind::Enum,
+                TokenKind::Enum
             )
     )
 }

@@ -1,14 +1,9 @@
+
 use std::fs;
 
-mod ast;
-mod interpreter;
-mod lexer;
-mod parser;
-mod token;
-
-use interpreter::Interpreter;
-use lexer::Lexer;
-use parser::Parser;
+use crate::interpreter::Interpreter;
+use crate::lexer::Lexer;
+use crate::parser::Parser;
 
 pub fn run_file(path: &str) -> Result<(), String> {
     let source = fs::read_to_string(path)

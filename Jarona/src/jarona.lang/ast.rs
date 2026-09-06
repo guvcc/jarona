@@ -8,7 +8,11 @@ pub enum Stmt {
     Var {name: String, value: Expr },
     Assign { name: String, value: Expr },
     Print(Expr),
+    If { condition: Expr, body: Vec<Stmt>, else_body: Option<Vec<Stmt>> },
+    Void { name: String, params: Vec<String>, body: Vec<Stmt>},
     Expr(Expr),
+    Return(Expr),
+    Struct { name: String, fields: Vec<String> },
 }
 
 
@@ -18,6 +22,17 @@ pub enum Expr {
     Variable(String),
     Array(Vec<Expr>),
     String(String),
+    Boolean(bool),
+
+    Field {
+        object: Box<Expr>,
+        name: String,
+    },
+
+    Call {
+        name: String,
+        args: Vec<Expr>,
+    },
 
     Unary {
         op: UnaryOp,
@@ -26,6 +41,7 @@ pub enum Expr {
 
     Import(Box<Expr>),
     ImportStr(Box<Expr>),
+    Declare(Box<Expr>),
 
     Binary {
         left: Box<Expr>,
@@ -47,4 +63,6 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
+    Equal,
+    Modulo,
 }

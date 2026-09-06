@@ -1,0 +1,53 @@
+// Math.jarona
+
+var PI = 3.141592653589793;
+var seed = 12345;
+
+// ─────────────────────────────
+// Random
+// ─────────────────────────────
+
+void random(min max) {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+
+    var range = max - min + 1;
+    var result = min + (seed % range);
+
+    return result;
+}
+
+// ─────────────────────────────
+// Sin
+// ─────────────────────────────
+
+void sin(x) {
+    var x2 = x * x;
+
+    var result = x;
+
+    result = result - (x * x2 / 6);
+    result = result + (x * x2 * x2 / 120);
+    result = result - (x * x2 * x2 * x2 / 5040);
+    result = result + (x * x2 * x2 * x2 * x2 / 362880);
+    result = result - (x * x2 * x2 * x2 * x2 * x2 / 39916800);
+
+    return result;
+}
+
+// ─────────────────────────────
+// Cos
+// ─────────────────────────────
+
+void cos(x) {
+    var x2 = x * x;
+
+    var result = 1;
+
+    result = result - (x2 / 2);
+    result = result + (x2 * x2 / 24);
+    result = result - (x2 * x2 * x2 / 720);
+    result = result + (x2 * x2 * x2 * x2 / 40320);
+    result = result - (x2 * x2 * x2 * x2 * x2 / 3628800);
+
+    return result;
+}

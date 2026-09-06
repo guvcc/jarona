@@ -67,11 +67,27 @@ impl<'a> Lexer<'a> {
         let token = match c {
             '(' => Some(self.simple(TokenKind::LParen)),
             ')' => Some(self.simple(TokenKind::RParen)),
+
             '+' => Some(self.simple(TokenKind::Plus)),
             '-' => Some(self.simple(TokenKind::Minus)),
             '*' => Some(self.simple(TokenKind::Star)),
+
             '[' => Some(self.simple(TokenKind::LBracket)),
             ']' => Some(self.simple(TokenKind::RBracket)),
+            
+            '{' => Some(self.simple(TokenKind::LBrace)),
+            '}' => Some(self.simple(TokenKind::RBrace)),
+
+            '%' => Some(self.simple(TokenKind::Percent)),
+
+            '=' => {
+                if self.peek() == '=' {
+                    self.advance();
+                    Some(self.simple(TokenKind::EqualEqual))
+                } else {
+                    Some(self.simple(TokenKind::Equal))
+                }
+            }
 
             '/' => {
                 if self.peek() == '/' {
@@ -87,8 +103,9 @@ impl<'a> Lexer<'a> {
                 }
             }
 
-            '=' => Some(self.simple(TokenKind::Equal)),
             ';' => Some(self.simple(TokenKind::Semicolon)),
+            
+            '.' => Some(self.simple(TokenKind::Dot)),
 
             ' ' | '\r' | '\t' | '\n' => None,
 
@@ -152,6 +169,16 @@ impl<'a> Lexer<'a> {
             "print" => TokenKind::Print,
             "import" => TokenKind::Import,
             "import$str" => TokenKind::ImportStr,
+
+            "if" => TokenKind::If,
+            "true" => TokenKind::True,
+            "false" => TokenKind::False,
+            "else" => TokenKind::Else,
+            "return" => TokenKind::Return,
+            "void" => TokenKind::Void,
+            "declare" => TokenKind::Declare,
+            "struct" => TokenKind::Struct,
+
             _ => TokenKind::Ident(lexeme.clone()),
         };
 
@@ -163,7 +190,9 @@ impl<'a> Lexer<'a> {
     }
 
     fn current_lexeme(&self) -> String {
-        self.chars[self.start..self.current].iter().collect()
+        self.chars[self.start..self.current]
+            .iter()
+            .collect()
     }
 
     fn advance(&mut self) -> char {

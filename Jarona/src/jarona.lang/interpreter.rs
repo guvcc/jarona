@@ -1,28 +1,47 @@
 use std::collections::HashMap;
 use std::fs;
-use std::fs::File;
-use std::io::{self, prelude::*, BufReader};
 
-use super::ast::{BinaryOp, Expr, Program, Stmt, UnaryOp};
-use super::lexer::Lexer;
-use super::parser::Parser;
+use crate::ast::{BinaryOp, Expr, Program, Stmt, UnaryOp};
+use crate::lexer::Lexer;
+use crate::parser::Parser;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(f64),
     String(String),
+    Boolean(bool),
     Array(Vec<Value>),
     Null,
+
+    Struct {
+        name: String,
+        fields: HashMap<String, Value>,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct Function {
+    params: Vec<String>,
+    body: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone)]
+struct Struct {
+    fields: Vec<String>,
 }
 
 pub struct Interpreter {
     variables: HashMap<String, Value>,
+    functions: HashMap<String, Function>,
+    structs: HashMap<String, Struct>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
+            functions: HashMap::new(),
+            structs: HashMap::new(),
         }
     }
 
@@ -34,74 +53,118 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute(&mut self, statement: &Stmt) -> Result<(), String> {
+    fn execute(&mut self, statement: &Stmt) -> Result<Option<Value>, String> {
         match statement {
             Stmt::Var { name, value } => {
                 let value = self.evaluate(value)?;
 
-                self.variables.insert(name.clone(), value);
+                self.variables.insert(
+                    name.clone(),
+                    value,
+                );
 
-                Ok(())
+                Ok(None)
             }
 
             Stmt::Assign { name, value } => {
                 let value = self.evaluate(value)?;
 
-                if !self.variables.contains_key(name) {
-                    return Err(format!("undefined variable `{name}`"));
-                }
+                self.variables.insert(
+                    name.clone(),
+                    value,
+                );
 
-                self.variables.insert(name.clone(), value);
-
-                Ok(())
+                Ok(None)
             }
 
             Stmt::Print(expr) => {
                 let value = self.evaluate(expr)?;
 
-                match value {
-                    Value::Number(value) => {
-                        println!("{value}");
-                    }
+                self.print_value(&value);
 
-                    Value::String(value) => {
-                        println!("{value}");
-                    }
-
-                    Value::Array(values) => {
-                        for value in values {
-                            match value {
-                                Value::String(value) => {
-                                    println!("{value}");
-                                }
-
-                                Value::Number(value) => {
-                                    println!("{value}");
-                                }
-
-                                Value::Array(_) => {
-                                    println!("[array]");
-                                }
-
-                                Value::Null => {
-                                    println!("null");
-                                }
-                            }
-                        }
-                    }
-
-                    Value::Null => {
-                        println!("null");
-                    }
-                }
-
-                Ok(())
+                Ok(None)
             }
 
             Stmt::Expr(expr) => {
                 self.evaluate(expr)?;
 
-                Ok(())
+                Ok(None)
+            }
+
+            Stmt::Struct {
+                name,
+                fields,
+            } => {
+                let structure = Struct {
+                    fields: fields.clone(),
+                };
+
+                self.structs.insert(
+                    name.clone(),
+                    structure,
+                );
+
+                Ok(None)
+            }
+
+            Stmt::Void {
+                name,
+                params,
+                body,
+            } => {
+                let function = Function {
+                    params: params.clone(),
+                    body: body.clone(),
+                };
+
+                self.functions.insert(
+                    name.clone(),
+                    function,
+                );
+
+                Ok(None)
+            }
+
+            Stmt::Return(expr) => {
+                let value = self.evaluate(expr)?;
+
+                Ok(Some(value))
+            }
+
+            Stmt::If {
+                condition,
+                body,
+                else_body,
+            } => {
+                let condition = self.evaluate(condition)?;
+
+                match condition {
+                    Value::Boolean(true) => {
+                        for statement in body {
+                            if let Some(value) = self.execute(statement)? {
+                                return Ok(Some(value));
+                            }
+                        }
+                    }
+
+                    Value::Boolean(false) => {
+                        if let Some(else_body) = else_body {
+                            for statement in else_body {
+                                if let Some(value) = self.execute(statement)? {
+                                    return Ok(Some(value));
+                                }
+                            }
+                        }
+                    }
+
+                    _ => {
+                        return Err(
+                            "if condition must be a boolean".to_string()
+                        );
+                    }
+                }
+
+                Ok(None)
             }
         }
     }
@@ -116,162 +179,457 @@ impl Interpreter {
                 Ok(Value::String(value.clone()))
             }
 
-            Expr::Import(path) => {
-                let path = self.evaluate(path)?;
-
-                let Value::String(path) = path else {
-                    return Err(
-                        "import path must be a string".to_string()
-                    );
-                };
-
-                self.import_file(&path)?;
-
-                Ok(Value::Null)
-            }
-
-            Expr::ImportStr(path) => {
-                let path = self.evaluate(path)?;
-
-                let Value::String(path) = path else {
-                    return Err(
-                        "import path must be a string".to_string()
-                    );
-                };
-
-                let lines = self.read_file(&path)?;
-
-                let values = lines
-                    .into_iter()
-                    .map(Value::String)
-                    .collect();
-
-                Ok(Value::Array(values))
-            }
-
-            Expr::Array(elements) => {
-                let values = elements
-                    .iter()
-                    .map(|element| self.evaluate(element))
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                Ok(Value::Array(values))
+            Expr::Boolean(value) => {
+                Ok(Value::Boolean(*value))
             }
 
             Expr::Variable(name) => {
-                match self.variables.get(name) {
-                    Some(value) => Ok(value.clone()),
-
-                    None => {
-                        Err(format!("undefined variable `{name}`"))
-                    }
-                }
+                self.variables
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| {
+                        format!("undefined variable `{name}`")
+                    })
             }
 
-            Expr::Unary { op, expr } => {
-                let value = self.evaluate(expr)?;
+            Expr::Array(elements) => {
+                let mut values = Vec::new();
 
-                let Value::Number(value) = value else {
-                    return Err(
-                        "unary operator requires a number".to_string()
+                for element in elements {
+                    values.push(
+                        self.evaluate(element)?
                     );
-                };
-
-                match op {
-                    UnaryOp::Negate => {
-                        Ok(Value::Number(-value))
-                    }
-
-                    UnaryOp::Plus => {
-                        Ok(Value::Number(value))
-                    }
                 }
+
+                Ok(Value::Array(values))
             }
 
-            Expr::Binary { left, op, right } => {
+            Expr::Binary {
+                left,
+                op,
+                right,
+            } => {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
 
-                let Value::Number(left) = left else {
-                    return Err(
-                        "left side of binary expression must be a number"
-                            .to_string()
-                    );
-                };
+                self.evaluate_binary(
+                    left,
+                    *op,
+                    right,
+                )
+            }
 
-                let Value::Number(right) = right else {
-                    return Err(
-                        "right side of binary expression must be a number"
-                            .to_string()
-                    );
-                };
+            Expr::Unary {
+                op,
+                expr,
+            } => {
+                let value = self.evaluate(expr)?;
 
-                match op {
-                    BinaryOp::Add => {
-                        Ok(Value::Number(left + right))
+                self.evaluate_unary(
+                    *op,
+                    value,
+                )
+            }
+
+            Expr::Call {
+                name,
+                args,
+            } => {
+                if self.structs.contains_key(name) {
+                    self.construct_struct(
+                        name,
+                        args,
+                    )
+                } else {
+                    self.call_function(
+                        name,
+                        args,
+                    )
+                }
+            }
+
+            Expr::Field {
+                object,
+                name,
+            } => {
+                let object = self.evaluate(object)?;
+
+                match object {
+                    Value::Struct {
+                        name: struct_name,
+                        fields,
+                    } => {
+                        fields
+                            .get(name)
+                            .cloned()
+                            .ok_or_else(|| {
+                                format!(
+                                    "struct `{struct_name}` has no field `{name}`"
+                                )
+                            })
                     }
 
-                    BinaryOp::Subtract => {
-                        Ok(Value::Number(left - right))
-                    }
-
-                    BinaryOp::Multiply => {
-                        Ok(Value::Number(left * right))
-                    }
-
-                    BinaryOp::Divide => {
-                        if right == 0.0 {
-                            return Err(
-                                "division by zero".to_string()
-                            );
-                        }
-
-                        Ok(Value::Number(left / right))
+                    _ => {
+                        Err(
+                            format!(
+                                "cannot access field `{name}` on non-struct value"
+                            )
+                        )
                     }
                 }
             }
 
-            _ => {
-                Err("expression not implemented yet".to_string())
+            Expr::Import(expr) => {
+                let path = self.evaluate(expr)?;
+
+                match path {
+                    Value::String(path) => {
+                        self.import_file(&path)
+                    }
+
+                    _ => {
+                        Err(
+                            "import path must be a string".to_string()
+                        )
+                    }
+                }
+            }
+
+            Expr::ImportStr(expr) => {
+                let path = self.evaluate(expr)?;
+
+                match path {
+                    Value::String(path) => {
+                        let contents = fs::read_to_string(&path)
+                            .map_err(|e| {
+                                format!(
+                                    "could not read `{path}`: {e}"
+                                )
+                            })?;
+
+                        Ok(Value::String(contents))
+                    }
+
+                    _ => {
+                        Err(
+                            "import$str path must be a string".to_string()
+                        )
+                    }
+                }
+            }
+
+            Expr::Declare(expr) => {
+                let path = self.evaluate(expr)?;
+
+                match path {
+                    Value::String(path) => {
+                        self.declare_file(&path)?;
+
+                        Ok(Value::Null)
+                    }
+
+                    _ => {
+                        Err(
+                            "declare path must be a string".to_string()
+                        )
+                    }
+                }
             }
         }
     }
 
-    fn import_file(&mut self, path: &str) -> Result<(), String> {
+    fn construct_struct(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+    ) -> Result<Value, String> {
+        let fields = self
+            .structs
+            .get(name)
+            .ok_or_else(|| {
+                format!("undefined struct `{name}`")
+            })?
+            .fields
+            .clone();
+
+        if args.len() != fields.len() {
+            return Err(
+                format!(
+                    "struct `{name}` expected {} fields, got {}",
+                    fields.len(),
+                    args.len()
+                )
+            );
+        }
+
+        let mut values = HashMap::new();
+
+        for (field, arg) in fields.iter().zip(args) {
+            let value = self.evaluate(arg)?;
+
+            values.insert(
+                field.clone(),
+                value,
+            );
+        }
+
+        Ok(Value::Struct {
+            name: name.to_string(),
+            fields: values,
+        })
+    }
+
+    fn call_function(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+    ) -> Result<Value, String> {
+        let function = self
+            .functions
+            .get(name)
+            .ok_or_else(|| {
+                format!("undefined function `{name}`")
+            })?
+            .clone();
+
+        if args.len() != function.params.len() {
+            return Err(
+                format!(
+                    "function `{name}` expected {} arguments, got {}",
+                    function.params.len(),
+                    args.len()
+                )
+            );
+        }
+
+        for (param, arg) in function.params.iter().zip(args) {
+            let value = self.evaluate(arg)?;
+
+            self.variables.insert(
+                param.clone(),
+                value,
+            );
+        }
+
+        for statement in &function.body {
+            if let Some(value) = self.execute(statement)? {
+                return Ok(value);
+            }
+        }
+
+        Ok(Value::Null)
+    }
+
+    fn evaluate_binary(
+        &self,
+        left: Value,
+        op: BinaryOp,
+        right: Value,
+    ) -> Result<Value, String> {
+        match (left, op, right) {
+            (
+                Value::Number(a),
+                BinaryOp::Add,
+                Value::Number(b),
+            ) => Ok(Value::Number(a + b)),
+
+            (
+                Value::Number(a),
+                BinaryOp::Subtract,
+                Value::Number(b),
+            ) => Ok(Value::Number(a - b)),
+
+            (
+                Value::Number(a),
+                BinaryOp::Multiply,
+                Value::Number(b),
+            ) => Ok(Value::Number(a * b)),
+
+            (
+                Value::Number(a),
+                BinaryOp::Divide,
+                Value::Number(b),
+            ) => Ok(Value::Number(a / b)),
+
+            (
+                Value::Number(a),
+                BinaryOp::Modulo,
+                Value::Number(b),
+            ) => Ok(Value::Number(a % b)),
+
+            (a, BinaryOp::Equal, b) => {
+                Ok(Value::Boolean(a == b))
+            }
+
+            _ => {
+                Err(
+                    "invalid binary operation".to_string()
+                )
+            }
+        }
+    }
+
+    fn evaluate_unary(
+        &self,
+        op: UnaryOp,
+        value: Value,
+    ) -> Result<Value, String> {
+        match (op, value) {
+            (
+                UnaryOp::Negate,
+                Value::Number(value),
+            ) => {
+                Ok(Value::Number(-value))
+            }
+
+            (
+                UnaryOp::Plus,
+                Value::Number(value),
+            ) => {
+                Ok(Value::Number(value))
+            }
+
+            _ => {
+                Err(
+                    "invalid unary operation".to_string()
+                )
+            }
+        }
+    }
+
+    fn print_value(&self, value: &Value) {
+        match value {
+            Value::Number(value) => {
+                println!("{value}");
+            }
+
+            Value::String(value) => {
+                println!("{value}");
+            }
+
+            Value::Boolean(value) => {
+                println!("{value}");
+            }
+
+            Value::Array(values) => {
+                println!("{values:?}");
+            }
+
+            Value::Null => {
+                println!("null");
+            }
+
+            Value::Struct {
+                name,
+                fields,
+            } => {
+                println!("{name} {{");
+
+                for (field, value) in fields {
+                    print!("    {field}: ");
+                    self.print_value(value);
+                }
+
+                println!("}}");
+            }
+        }
+    }
+
+    fn import_file(
+        &mut self,
+        path: &str,
+    ) -> Result<Value, String> {
         let source = fs::read_to_string(path)
-            .map_err(|e| format!("could not read `{path}`: {e}"))?;
+            .map_err(|e| {
+                format!(
+                    "could not read `{path}`: {e}"
+                )
+            })?;
 
         let mut lexer = Lexer::new(&source);
+
         let tokens = lexer.tokenize()?;
 
         let mut parser = Parser::new(tokens);
+
         let program = parser.parse_program()?;
 
-        self.run(&program)?;
-
-        Ok(())
-    }
-
-    fn read_file(&mut self, path: &str) -> Result<Vec<String>, String> {
-        let file = File::open(path)
-            .map_err(|e| format!("could not open `{path}`: {e}"))?;
-
-        let reader = BufReader::new(file);
-        let mut lines = Vec::new();
-
-        for line in reader.lines() {
-            let line = line
-                .map_err(|e| format!("could not read line: {e}"))?;
-
-            let trimmed = line.trim();
-
-            if trimmed.is_empty() || trimmed.starts_with("//") {
-                continue;
-            }
-
-            lines.push(line);
+        for statement in &program.statements {
+            self.execute(statement)?;
         }
 
-        Ok(lines)
+        Ok(Value::Null)
+    }
+
+    fn declare_file(
+        &mut self,
+        path: &str,
+    ) -> Result<(), String> {
+        let source = fs::read_to_string(path)
+            .map_err(|e| {
+                format!(
+                    "could not read `{path}`: {e}"
+                )
+            })?;
+
+        let mut lexer = Lexer::new(&source);
+
+        let tokens = lexer.tokenize()?;
+
+        let mut parser = Parser::new(tokens);
+
+        let program = parser.parse_program()?;
+
+        for statement in program.statements {
+            match statement {
+                Stmt::Var {
+                    name,
+                    value,
+                } => {
+                    let value = self.evaluate(&value)?;
+
+                    self.variables.insert(
+                        name,
+                        value,
+                    );
+                }
+
+                Stmt::Void {
+                    name,
+                    params,
+                    body,
+                } => {
+                    self.functions.insert(
+                        name,
+                        Function {
+                            params,
+                            body,
+                        },
+                    );
+                }
+
+                Stmt::Struct {
+                    name,
+                    fields,
+                } => {
+                    self.structs.insert(
+                        name,
+                        Struct {
+                            fields,
+                        },
+                    );
+                }
+
+                _ => {
+                    return Err(
+                        format!(
+                            "cannot declare this statement from `{path}`"
+                        )
+                    );
+                }
+            }
+        }
+
+        Ok(())
     }
 }

@@ -1,4 +1,14 @@
 use std::{env, fs};
+#[path = "jarona.lang/ast.rs"]
+mod ast;
+#[path = "jarona.lang/interpreter.rs"]
+mod interpreter;
+#[path = "jarona.lang/lexer.rs"]
+mod lexer;
+#[path = "jarona.lang/parser.rs"]
+mod parser;
+#[path = "jarona.lang/token.rs"]
+mod token;
 #[path = "jarona.lang/reader.rs"]
 mod reader;
 

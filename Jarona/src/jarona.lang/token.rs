@@ -5,12 +5,23 @@ pub enum TokenKind {
     Ident(String),
     Number(f64),
     String(String),
+    Return,
+    Declare,
+    True,
+    False,
+    If,
+    Void,
+    EqualEqual,
+    LBrace,
+    RBrace,
+    Else,
     Import,
     ImportStr,
     Plus,
     Minus,
     Star,
     Slash,
+    Percent,
     Equal,
     LParen,
     RParen,
@@ -18,7 +29,8 @@ pub enum TokenKind {
     RBracket,
     Eof,
     Semicolon,
-
+    Struct,
+    Dot,
 }
 
 #[derive(Debug, Clone, PartialEq)]
